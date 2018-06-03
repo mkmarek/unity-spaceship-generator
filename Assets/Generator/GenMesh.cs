@@ -13,7 +13,7 @@ namespace ProceduralSpaceShip
 
     public class GenMesh
     {
-        public GenMeshVertex[] Vertices { get { return Faces.SelectMany(e => e.Vertices).ToArray(); } }
+        public GenMeshVertex[] Vertices { get { return Faces.SelectMany(e => e.Vertices).Distinct().ToArray(); } }
         public List<GenMeshFace> Faces { get; set; }
 
         public static GenMesh CreateCube(float size = 1)
@@ -34,22 +34,55 @@ namespace ProceduralSpaceShip
             // create 6 faces
 
             // top face
-            mesh.Faces.Add(new GenMeshFace(RTT, RTB, LTB, LTT));
+            mesh.Faces.Add(new GenMeshSquareFace(RTT, RTB, LTB, LTT));
 
             // left face
-            mesh.Faces.Add(new GenMeshFace(LTB, LBB, LBT, LTT));
+            mesh.Faces.Add(new GenMeshSquareFace(LTB, LBB, LBT, LTT));
 
             // right face
-            mesh.Faces.Add(new GenMeshFace(RTT, RBT, RBB, RTB));
+            mesh.Faces.Add(new GenMeshSquareFace(RTT, RBT, RBB, RTB));
 
             // front face
-            mesh.Faces.Add(new GenMeshFace(RTB, RBB, LBB, LTB));
+            mesh.Faces.Add(new GenMeshSquareFace(RTB, RBB, LBB, LTB));
 
             // back face
-            mesh.Faces.Add(new GenMeshFace(LTT, LBT, RBT, RTT));
+            mesh.Faces.Add(new GenMeshSquareFace(LTT, LBT, RBT, RTT));
 
             // bottom face
-            mesh.Faces.Add(new GenMeshFace(LBT, LBB, RBB, RBT));
+            mesh.Faces.Add(new GenMeshSquareFace(LBT, LBB, RBB, RBT));
+
+            return mesh;
+        }
+
+        public static GenMesh CreateCyllinder(int numberOfSegments, float cylinderSize1, float cylinderSize2, float cylinderDepth)
+        {
+            var mesh = new GenMesh();
+            var lowerCircle = new List<GenMeshVertex>();
+            var upperCircle = new List<GenMeshVertex>();
+
+            for (var i = 0; i < numberOfSegments; i++)
+            {
+                lowerCircle.Add(new GenMeshVertex(new Vector3(
+                    Mathf.Cos((float)i / numberOfSegments * Mathf.PI * 2) * cylinderSize1 / 2,
+                    Mathf.Sin((float)i / numberOfSegments * Mathf.PI * 2) * cylinderSize1 / 2,
+                    - cylinderDepth / 2
+                    )));
+
+                upperCircle.Add(new GenMeshVertex(new Vector3(
+                    Mathf.Cos((float)i / numberOfSegments * Mathf.PI * 2) * cylinderSize2 / 2,
+                    Mathf.Sin((float)i / numberOfSegments * Mathf.PI * 2) * cylinderSize2 / 2,
+                    cylinderDepth / 2)));
+            }
+
+            for (var i = 0; i < numberOfSegments; i++)
+            {
+                mesh.Faces.Add(new GenMeshSquareFace(
+                    upperCircle[i],
+                    upperCircle[(i + 1) % numberOfSegments],          
+                    lowerCircle[(i + 1) % numberOfSegments],
+                    lowerCircle[i]
+                    ));
+            }
 
             return mesh;
         }
@@ -96,54 +129,58 @@ namespace ProceduralSpaceShip
 
         public GenMeshFace[] ExtrudeDiscreetFace(GenMeshFace face)
         {
-            var frontFace = face.Clone();
-            var leftFace = new GenMeshFace(face.LeftTop, face.LeftBottom, frontFace.LeftBottom, frontFace.LeftTop);
-            var topFace = new GenMeshFace(face.LeftTop, frontFace.LeftTop, frontFace.RightTop, face.RightTop);
-            var rightFace = new GenMeshFace(frontFace.RightTop, frontFace.RightBottom, face.RightBottom, face.RightTop);
-            var bottomFace = new GenMeshFace(frontFace.LeftBottom, face.LeftBottom, face.RightBottom, frontFace.RightBottom);
+            var faces = face.Extrude();
 
-            this.Faces.Add(frontFace);
-            this.Faces.Add(leftFace);
-            this.Faces.Add(topFace);
-            this.Faces.Add(rightFace);
-            this.Faces.Add(bottomFace);
+            foreach (var addedFace in faces)
+            {
+                this.Faces.Add(addedFace);
+            }
 
             this.Faces.Remove(face);
 
-            return new GenMeshFace[]
-            {
-                frontFace,
-                leftFace,
-                topFace,
-                rightFace,
-                bottomFace
-            };
+            return faces;
         }
 
         public void Scale(Vector3 scaleVector, Matrix4x4 faceSpace, GenMeshVertex[] vertices)
         {
+            // Not sure what Blender does with the space matrix, so I'm gonna skip it for now
+            var center = Vector3.zero;
+
             foreach (var vert in vertices)
             {
-                var center = (Vector3)(faceSpace * vert.Coordinates);
-                var centered = vert.Coordinates - center;
-                vert.Coordinates = new Vector3(centered.x * scaleVector.x, centered.y * scaleVector.y, centered.z * scaleVector.z) + center;
+                center += vert.Coordinates;
+            }
+
+            center = center / vertices.Count();
+
+            foreach (var vert in vertices)
+            {
+                var transformedSpace = (vert.Coordinates - center);
+                vert.Coordinates = (new Vector3(transformedSpace.x * scaleVector.x, transformedSpace.y * scaleVector.y, transformedSpace.z * scaleVector.z)) + center;
             }
         }
 
-        public Mesh ToUnityMesh()
+        public Mesh ToUnityMesh(bool smooth = false)
         {
             var mesh = new Mesh();
-            var tmpFaces = this.Faces.Select(e => e.Clone()).ToArray();
 
-            this.IndexAllVertexes(tmpFaces);
-            var vertices = tmpFaces.SelectMany(f => f.Vertices.Select(e => e.Coordinates)).ToArray();
+            var faces = smooth
+                ? this.Faces.ToArray()
+                : this.Faces.Select(e => e.Clone()).ToArray();
+
+            var vertices = faces.SelectMany(f => f.Vertices);
+
+            this.IndexAllVertexes(vertices);
+            var coordinates = vertices.Select(e => e.Coordinates).ToArray();
 
             var centerOfMass = Vector3.zero;
-            foreach (var vertex in vertices) centerOfMass += vertex;
-            centerOfMass /= vertices.Length;
+            foreach (var vertex in coordinates) centerOfMass += vertex;
+            centerOfMass /= coordinates.Length;
 
-            mesh.vertices = vertices.Select(v => v - centerOfMass).ToArray();
-            mesh.triangles = tmpFaces.SelectMany(face => face.GetTriangles()).ToArray();
+            mesh.vertices = coordinates.Select(v => v - centerOfMass).ToArray();
+            mesh.triangles = faces.SelectMany(face => face.GetTriangles()).ToArray();
+
+            Debug.Log("Vertex count: " + mesh.vertices.Length);
 
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
@@ -152,10 +189,11 @@ namespace ProceduralSpaceShip
             return mesh;
         }
 
-        private void IndexAllVertexes(IEnumerable<GenMeshFace> tmpFaces)
+        private void IndexAllVertexes(IEnumerable<GenMeshVertex> vertices)
         {
             var index = 0;
-            foreach (var vertex in tmpFaces.SelectMany(f => f.Vertices))
+
+            foreach (var vertex in vertices)
             {
                 vertex.Index = index;
                 index++;
@@ -167,75 +205,14 @@ namespace ProceduralSpaceShip
             // TODO
         }
 
-        internal GenMeshFace[] Subdivide(GenMeshFace face, int numberOfCuts)
+        public GenMeshFace[] Subdivide(GenMeshFace face, int numberOfCuts)
         {
-            var steps = numberOfCuts + 2;
-
-            var topSize = (face.RightTop.Coordinates - face.LeftTop.Coordinates).magnitude;
-            var bottomSize = (face.RightBottom.Coordinates - face.LeftBottom.Coordinates).magnitude;
-            var leftSize = (face.LeftTop.Coordinates - face.LeftBottom.Coordinates).magnitude;
-            var rightSize = (face.RightTop.Coordinates - face.RightBottom.Coordinates).magnitude;
-
-            var result = new List<GenMeshFace>();
-
-            var topPoints = new List<Vector3>();
-            var bottomPoints = new List<Vector3>();
-            var leftPoints = new List<Vector3>();
-            var rightPoints = new List<Vector3>();
-
-
-            for (var i = 0; i < steps; i++)
-            {
-                // horizontal
-                var hfrom = Vector3.Lerp(face.LeftTop.Coordinates, face.RightTop.Coordinates, ((float)i) / (steps - 1));
-                var hto = Vector3.Lerp(face.LeftBottom.Coordinates, face.RightBottom.Coordinates, ((float)i) / (steps - 1));
-
-                // vertical
-                var vfrom = Vector3.Lerp(face.LeftTop.Coordinates, face.LeftBottom.Coordinates, ((float)i) / (steps - 1));
-                var vto = Vector3.Lerp(face.RightTop.Coordinates, face.RightBottom.Coordinates, ((float)i) / (steps - 1));
-
-                topPoints.Add(hfrom);
-                bottomPoints.Add(hto);
-                leftPoints.Add(vfrom);
-                rightPoints.Add(vto);
-            }
-
-            var points = new Vector3[steps, steps];
-
-            for (var x = 0; x < steps; x++)
-            {
-                for (var y = 0; y < steps; y++)
-                {
-                    var top = topPoints[x];
-                    var bottom = bottomPoints[x];
-                    var left = leftPoints[y];
-                    var right = rightPoints[y];
-
-                    Vector3 intersection;
-                    if (!LineLineIntersection(out intersection, top, (bottom - top), left, (right - left)))
-                    {
-                        throw new InvalidOperationException("Points here should always intersect");
-                    }
-
-                    points[x, y] = intersection;
-                }
-            }
-
-            for (var x = 0; x < steps - 1; x++)
-            {
-                for (var y = 0; y < steps - 1; y++)
-                {
-                    result.Add(new GenMeshFace(
-                        new GenMeshVertex(points[x, y]),
-                        new GenMeshVertex(points[x, y + 1]),
-                        new GenMeshVertex(points[x + 1, y + 1]),
-                        new GenMeshVertex(points[x + 1, y])));
-                }
-            }
+            var result = face.Subdivide(numberOfCuts);
 
             this.Faces.Remove(face);
             this.Faces.AddRange(result);
-            return result.ToArray();
+
+            return result;
         }
 
         // from http://wiki.unity3d.com/index.php/3d_Math_functions
@@ -259,6 +236,21 @@ namespace ProceduralSpaceShip
             {
                 intersection = Vector3.zero;
                 return false;
+            }
+        }
+
+        public void CreateCyllinder(int numberOfSegments, float cylinderSize1, float cylinderSize2, float cylinderDepth, Matrix4x4 cylinderMatrix)
+        {
+            var cyllinderMesh = CreateCyllinder(numberOfSegments, cylinderSize1, cylinderSize2, cylinderDepth);
+
+            foreach (var vertex in cyllinderMesh.Vertices)
+            {
+                vertex.Coordinates = cylinderMatrix.MultiplyPoint3x4(vertex.Coordinates);
+            }
+
+            foreach (var face in cyllinderMesh.Faces)
+            {
+                this.Faces.Add(face);
             }
         }
     }

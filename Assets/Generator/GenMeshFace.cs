@@ -1,96 +1,51 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 
 namespace ProceduralSpaceShip
 {
-    public class GenMeshFace
+    public abstract class GenMeshFace
     {
-        public Vector3 Normal
-        {
-            get
-            {
-                var a = RightBottom.Coordinates - LeftBottom.Coordinates;
-                var b = LeftTop.Coordinates - LeftBottom.Coordinates;
+        public abstract Vector3 Normal { get; }
 
-                return Vector3.Cross(a, -b).normalized;
-            }
-        }
-
-        public Vector2 Size
-        {
-            get
-            {
-                var width = Mathf.Abs((LeftTop.Coordinates - RightTop.Coordinates).magnitude);
-                var height = Mathf.Abs(LeftTop.Coordinates.y - LeftBottom.Coordinates.y);
-
-                return new Vector2(width, height);
-            }
-        }
+        public abstract Vector2 Size { get; }
 
         public GenMeshVertex[] Vertices { get; private set; }
-        public float AspectRatio
-        {
-            get
-            {
-                var faceAspectRatio = Mathf.Max(
-                    0.01f,
-                    (LeftTop.Coordinates - RightTop.Coordinates).magnitude / (LeftTop.Coordinates - LeftBottom.Coordinates).magnitude);
-
-                if (faceAspectRatio < 1.0f)
-                {
-                    faceAspectRatio = 1.0f / faceAspectRatio;
-                }
-
-                return faceAspectRatio;
-            }
-        }
-
-        public GenMeshVertex LeftTop { get { return Vertices[0]; } }
-        public GenMeshVertex LeftBottom { get { return Vertices[1]; } }
-        public GenMeshVertex RightBottom { get { return Vertices[2]; } }
-        public GenMeshVertex RightTop { get { return Vertices[3]; } }
+        public abstract float AspectRatio { get; }
 
         public int MaterialIndex { get; internal set; }
+        public abstract float Width { get; }
+        public abstract float Height { get; }
 
-        public GenMeshFace()
-        {
-            this.Vertices = new GenMeshVertex[4];
-        }
+        public abstract GenMeshVertex LeftTop { get; }
+        public abstract GenMeshVertex LeftBottom { get; }
+        public abstract GenMeshVertex RightBottom { get; }
+        public abstract GenMeshVertex RightTop { get; }
 
-        public GenMeshFace(GenMeshVertex leftTop, GenMeshVertex leftBottom, GenMeshVertex rightBottom, GenMeshVertex rightTop) : this()
+        public GenMeshFace(GenMeshVertex[] vertices)
         {
-            this.Vertices[0] = leftTop;
-            this.Vertices[1] = leftBottom;
-            this.Vertices[2] = rightBottom;
-            this.Vertices[3] = rightTop;
+            this.Vertices = vertices;
         }
 
         public Vector3 CalculateCenterBounds()
         {
-            return (LeftTop.Coordinates + LeftBottom.Coordinates + RightBottom.Coordinates + RightTop.Coordinates) / 4;
-        }
+            var sum = Vector3.zero;
 
-        internal GenMeshFace Clone()
-        {
-            return new GenMeshFace(
-                this.LeftTop.Clone(),
-                this.LeftBottom.Clone(),
-                this.RightBottom.Clone(),
-                this.RightTop.Clone()
-            );
-        }
-
-        public int[] GetTriangles()
-        {
-            return new int[]
+            foreach (var vertex in this.Vertices)
             {
-                LeftTop.Index,
-                RightBottom.Index,
-                LeftBottom.Index,
+                sum += vertex.Coordinates;
+            }
 
-                LeftTop.Index,
-                RightTop.Index,
-                RightBottom.Index,
-            };
+            return sum / this.Vertices.Length;
         }
+
+        public abstract GenMeshFace Clone();
+
+        public abstract int[] GetTriangles();
+
+        public abstract GenMeshFace[] Extrude();
+
+        public abstract GenMeshFace[] Subdivide(int numberOfCuts);
+
+        public abstract float Area();
     }
 }

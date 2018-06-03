@@ -10,12 +10,12 @@ This is a port of a spaceship generator originally written as a blender plugin a
 - [x] Asymmetry segments
 - [ ] Face details
     - [x] exhaust
-    - [ ] grid
-    - [ ] surface antenna
+    - [x] grid
+    - [x] surface antenna
     - [ ] weapons
     - [ ] sphere to face
-    - [ ] disc to face
-    - [ ] cylinders to face
+    - [x] disc to face
+    - [x] cylinders to face
 - [ ] horizontal symmetry
 - [ ] vertical symmetry
 - [ ] bevels

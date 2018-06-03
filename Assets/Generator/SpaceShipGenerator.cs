@@ -7,6 +7,9 @@ namespace ProceduralSpaceShip
     public class SpaceShipGenerator : MonoBehaviour
     {
         [SerializeField]
+        private bool smoothShading = false;
+
+        [SerializeField]
         private int seed = 844483692;
 
         [SerializeField]
@@ -54,7 +57,7 @@ namespace ProceduralSpaceShip
 
             var meshFilter = GetComponent<MeshFilter>();
 
-            meshFilter.sharedMesh = mesh.ToUnityMesh();
+            meshFilter.sharedMesh = mesh.ToUnityMesh(smoothShading);
         }
 
         private void Generate(GenMesh genmesh)
@@ -117,7 +120,7 @@ namespace ProceduralSpaceShip
                                 genmesh.Translate(sidewaysTranslation, face.Vertices);
                             }
 
-                            // Maybe add some rotation around Y axis
+                            // Maybe add some rotation around Z axis
                             if (Random.value > 0.5f)
                             {
                                 var angle = 5f;
@@ -126,7 +129,7 @@ namespace ProceduralSpaceShip
                                     angle = -angle;
                                 }
 
-                                var quaterion = Quaternion.AngleAxis(angle, new Vector3(0, 1, 0));
+                                var quaterion = Quaternion.AngleAxis(angle, new Vector3(0, 0, 1));
                                 genmesh.Rotate(face.Vertices, new Vector3(0, 0, 0), quaterion);
                             }
                         }
@@ -195,7 +198,7 @@ namespace ProceduralSpaceShip
                     // Spin the wheel! Let's categorize + assign some materials
                     var val = Random.value;
 
-                    if (face.Normal.x < -0.95f)
+                    if (face.Normal.x < -0.9f)
                     {
                         if (!engineFaces.Any() || val > 0.75f)
                             engineFaces.Add(face);
@@ -218,7 +221,7 @@ namespace ProceduralSpaceShip
                         else
                             face.MaterialIndex = 1;// Material.hull_lights
                     }
-                    else if (face.Normal.z > 0.9f) // top face
+                    else if (face.Normal.y > 0.9f) // top face
                     {
                         if (Vector3.Dot(face.Normal, face.CalculateCenterBounds()) > 0 && val > 0.7f)
                             antennaFaces.Add(face);  // top facing antenna
@@ -227,7 +230,7 @@ namespace ProceduralSpaceShip
                         else if (val > 0.3f)
                             cylinderFaces.Add(face);
                     }
-                    else if (face.Normal.z < -0.9f) // bottom face
+                    else if (face.Normal.y < -0.9f) // bottom face
                     {
                         if (val > 0.75f)
                             discFaces.Add(face);
@@ -236,7 +239,7 @@ namespace ProceduralSpaceShip
                         else if (val > 0.25f)
                             weaponFaces.Add(face);
                     }
-                    else if (Mathf.Abs(face.Normal.y) > 0.9f) // side face
+                    else if (Mathf.Abs(face.Normal.z) > 0.9f) // side face
                     {
                         if (!weaponFaces.Any() || val > 0.75f)
                             weaponFaces.Add(face);
@@ -286,14 +289,95 @@ namespace ProceduralSpaceShip
             }
         }
 
+        private Matrix4x4 GetFaceMatrix(GenMeshFace face, Vector3? position = null)
+        {
+            var xAxis = (face.RightTop.Coordinates - face.LeftTop.Coordinates).normalized;
+            var zAxis = -face.Normal;
+            var yAxis = Vector3.Cross(zAxis, xAxis);
+
+            if (!position.HasValue)
+            {
+                position = face.CalculateCenterBounds();
+            }
+
+            //return Matrix4x4.Translate(position.Value);
+
+            // Construct a 4x4 matrix from axes + position:
+            // http://i.stack.imgur.com/3TnQP.png
+
+            var mat = new Matrix4x4();
+            mat[0, 0] = xAxis.x;
+            mat[1, 0] = xAxis.y;
+            mat[2, 0] = xAxis.z;
+            mat[3, 0] = 0;
+            mat[0, 1] = yAxis.x;
+            mat[1, 1] = yAxis.y;
+            mat[2, 1] = yAxis.z;
+            mat[3, 1] = 0;
+            mat[0, 2] = zAxis.x;
+            mat[1, 2] = zAxis.y;
+            mat[2, 2] = zAxis.z;
+            mat[3, 2] = 0;
+            mat[0, 3] = position.Value.x;
+            mat[1, 3] = position.Value.y;
+            mat[2, 3] = position.Value.z;
+            mat[3, 3] = 1;
+
+            return mat;
+        }
+
         private void AddCyllindersToFace(GenMesh genmesh, GenMeshFace fac)
         {
-            
+            var horizontalStep = Random.Range(1, 3);
+            var verticalStep = Random.Range(1, 3);
+            var numberOfSegments = Random.Range(6, 12);
+            var faceWidth = fac.Width;
+            var faceHeight = fac.Height;
+            var cylinderDepth = 1.3f * Mathf.Min(faceWidth / (horizontalStep + 2), faceHeight / (verticalStep + 2));
+            var cylinderSize = cylinderDepth * 0.5f;
+
+            for (var h = 0; h < horizontalStep; h++)
+            {
+                var top = Vector3.Lerp(fac.LeftTop.Coordinates, fac.RightTop.Coordinates, ((float)h + 1) / (horizontalStep + 1));
+                var bottom = Vector3.Lerp(fac.LeftBottom.Coordinates, fac.RightBottom.Coordinates, ((float)h + 1) / (horizontalStep + 1));
+
+                for (var v = 0; v < verticalStep; v++)
+                {
+                    var pos = Vector3.Lerp(top, bottom, ((float)v + 1) / (verticalStep + 1));
+                    var cylinderMatrix = GetFaceMatrix(fac, pos) * Matrix4x4.Rotate(Quaternion.AngleAxis(90, new Vector3(0, 1, 0)));
+
+                    genmesh.CreateCyllinder(numberOfSegments, cylinderSize, cylinderSize, cylinderDepth, cylinderMatrix);
+                }
+            }
+
         }
 
         private void AddDiscToFace(GenMesh genmesh, GenMeshFace fac)
         {
-            
+            var faceWidth = fac.Width;
+            var faceHeight = fac.Height;
+            var depth = 0.125f * Mathf.Min(faceWidth, faceHeight);
+
+            genmesh.CreateCyllinder(
+                32,
+                depth * 3,
+                depth * 4,
+                depth,
+                GetFaceMatrix(fac, fac.CalculateCenterBounds() + fac.Normal * depth * 0.5f));
+
+            genmesh.CreateCyllinder(
+                32,
+                depth * 1.25f,
+                depth * 2.25f,
+                0.0f,
+                GetFaceMatrix(fac, fac.CalculateCenterBounds() + fac.Normal * depth * 1.05f));
+
+            /*
+             for vert in result['verts']:
+        for face in vert.link_faces:
+            face.material_index = Material.glow_disc
+             
+             */
         }
 
         private void AddSphereToFace(GenMesh genmesh, GenMeshFace fac)
@@ -308,12 +392,72 @@ namespace ProceduralSpaceShip
 
         private void AddSurfaceAntennaToFace(GenMesh genmesh, GenMeshFace fac)
         {
-            
+            var horizontalStep = Random.Range(4, 10);
+            var verticalStep = Random.Range(4, 10);
+
+            for (var h = 0; h < horizontalStep; h++)
+            {
+                var top = Vector3.Lerp(fac.LeftTop.Coordinates, fac.RightTop.Coordinates, ((float)h + 1) / (horizontalStep + 1));
+                var bottom = Vector3.Lerp(fac.LeftBottom.Coordinates, fac.RightBottom.Coordinates, ((float)h + 1) / (horizontalStep + 1));
+
+                for (var v = 0; v < verticalStep; v++)
+                {
+                    if (Random.value > 0.9f)
+                    {
+                        var pos = Vector3.Lerp(top, bottom, ((float)v + 1) / (verticalStep + 1));
+                        var faceSize = Mathf.Sqrt(fac.Area());
+                        var depth = Random.Range(0.1f, 1.5f) * faceSize;
+                        var depthShort = depth * Random.Range(0.02f, 0.15f);
+                        var baseDiameter = Random.Range(0.005f, 0.05f);
+                        var materialIndex = Random.value > 0.5f ? 0 /*Material.hull*/ : 1;/*Material.hull_dark*/
+
+                        // Spire
+                        var numSegments = Random.Range(3, 6);
+                        genmesh.CreateCyllinder(numSegments, 0, baseDiameter, depth, GetFaceMatrix(fac, pos + fac.Normal * depth * 0.5f));
+
+                        //for vert in result['verts']:
+                        //    for vert_face in vert.link_faces:
+                        //        vert_face.material_index = material_index
+                        //    }
+
+                        // Base
+                        genmesh.CreateCyllinder(
+                            numSegments,
+                            baseDiameter * Random.Range(1f, 1.5f),
+                            baseDiameter * Random.Range(1.5f, 2f),
+                            depthShort,
+                            GetFaceMatrix(fac, pos + fac.Normal * depthShort * 0.45f));
+
+                        //    for vert in result['verts']:
+                        //for vert_face in vert.link_faces:
+                        //    vert_face.material_index = material_index
+                    }
+                }
+            }
         }
 
         private void AddGridToFace(GenMesh genmesh, GenMeshFace fac)
         {
-           
+            var result = genmesh.Subdivide(fac, Random.Range(2, 4));
+            var gridLength = Random.Range(0.025f, 0.15f);
+            var scale = 0.8f;
+
+            for (var i = 0; i < result.Length; i++)
+            {
+                var face = result[i];
+                var materialIndex = Random.value > 0.5f ? 1/*Material.hull_lights*/ : 4 /*Material.hull*/;
+                var extrudedFaceList = new List<GenMeshFace>();
+
+                face = ExtrudeFace(genmesh, face, gridLength, extrudedFaceList);
+
+                foreach (var f in extrudedFaceList)
+                {
+                    if (Mathf.Abs(face.Normal.z) < 0.707) // # side face
+                        f.MaterialIndex = materialIndex;
+                }
+
+                ScaleFace(genmesh, face, scale, scale, scale);
+            }
         }
 
         // Given a face, splits it into a uniform grid and extrudes each grid face
@@ -370,7 +514,7 @@ namespace ProceduralSpaceShip
 
         private void ScaleFace(GenMesh genmesh, GenMeshFace face, float sx, float sy, float sz)
         {
-            genmesh.Scale(new Vector3(sx, sy, sz), face.Vertices);
+            genmesh.Scale(new Vector3(sx, sy, sz), GetFaceMatrix(face).inverse, face.Vertices);
         }
 
         private GenMeshFace ExtrudeFace(GenMesh genmesh, GenMeshFace face, float distance, List<GenMeshFace> extrudedFaces = null)
