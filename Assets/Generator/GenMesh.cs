@@ -16,78 +16,7 @@ namespace ProceduralSpaceShip
         public GenMeshVertex[] Vertices { get { return Faces.SelectMany(e => e.Vertices).Distinct().ToArray(); } }
         public List<GenMeshFace> Faces { get; set; }
 
-        public static GenMesh CreateCube(float size = 1)
-        {
-            var mesh = new GenMesh();
-
-            // create 8 vertices the notation is XYZ so for vertex that's on top face on the left top it will be LTT
-            var LTT = new GenMeshVertex(new Vector3(-size, +size, -size));
-            var RTT = new GenMeshVertex(new Vector3(+size, +size, -size));
-            var RTB = new GenMeshVertex(new Vector3(+size, +size, +size));
-            var LTB = new GenMeshVertex(new Vector3(-size, +size, +size));
-
-            var LBT = new GenMeshVertex(new Vector3(-size, -size, -size));
-            var RBT = new GenMeshVertex(new Vector3(+size, -size, -size));
-            var RBB = new GenMeshVertex(new Vector3(+size, -size, +size));
-            var LBB = new GenMeshVertex(new Vector3(-size, -size, +size));
-
-            // create 6 faces
-
-            // top face
-            mesh.Faces.Add(new GenMeshSquareFace(RTT, RTB, LTB, LTT));
-
-            // left face
-            mesh.Faces.Add(new GenMeshSquareFace(LTB, LBB, LBT, LTT));
-
-            // right face
-            mesh.Faces.Add(new GenMeshSquareFace(RTT, RBT, RBB, RTB));
-
-            // front face
-            mesh.Faces.Add(new GenMeshSquareFace(RTB, RBB, LBB, LTB));
-
-            // back face
-            mesh.Faces.Add(new GenMeshSquareFace(LTT, LBT, RBT, RTT));
-
-            // bottom face
-            mesh.Faces.Add(new GenMeshSquareFace(LBT, LBB, RBB, RBT));
-
-            return mesh;
-        }
-
-        public static GenMesh CreateCyllinder(int numberOfSegments, float cylinderSize1, float cylinderSize2, float cylinderDepth)
-        {
-            var mesh = new GenMesh();
-            var lowerCircle = new List<GenMeshVertex>();
-            var upperCircle = new List<GenMeshVertex>();
-
-            for (var i = 0; i < numberOfSegments; i++)
-            {
-                lowerCircle.Add(new GenMeshVertex(new Vector3(
-                    Mathf.Cos((float)i / numberOfSegments * Mathf.PI * 2) * cylinderSize1 / 2,
-                    Mathf.Sin((float)i / numberOfSegments * Mathf.PI * 2) * cylinderSize1 / 2,
-                    - cylinderDepth / 2
-                    )));
-
-                upperCircle.Add(new GenMeshVertex(new Vector3(
-                    Mathf.Cos((float)i / numberOfSegments * Mathf.PI * 2) * cylinderSize2 / 2,
-                    Mathf.Sin((float)i / numberOfSegments * Mathf.PI * 2) * cylinderSize2 / 2,
-                    cylinderDepth / 2)));
-            }
-
-            for (var i = 0; i < numberOfSegments; i++)
-            {
-                mesh.Faces.Add(new GenMeshSquareFace(
-                    upperCircle[i],
-                    upperCircle[(i + 1) % numberOfSegments],          
-                    lowerCircle[(i + 1) % numberOfSegments],
-                    lowerCircle[i]
-                    ));
-            }
-
-            return mesh;
-        }
-
-        private GenMesh()
+        public GenMesh()
         {
             this.Faces = new List<GenMeshFace>();
         }
@@ -239,16 +168,31 @@ namespace ProceduralSpaceShip
             }
         }
 
-        public void CreateCyllinder(int numberOfSegments, float cylinderSize1, float cylinderSize2, float cylinderDepth, Matrix4x4 cylinderMatrix)
+        public void CreateCylinder(int numberOfSegments, float cylinderSize1, float cylinderSize2, float cylinderDepth, Matrix4x4 cylinderMatrix)
         {
-            var cyllinderMesh = CreateCyllinder(numberOfSegments, cylinderSize1, cylinderSize2, cylinderDepth);
+            var cylinderMesh = GenMeshFactory.CreateCylinder(numberOfSegments, cylinderSize1, cylinderSize2, cylinderDepth);
 
-            foreach (var vertex in cyllinderMesh.Vertices)
+            foreach (var vertex in cylinderMesh.Vertices)
             {
                 vertex.Coordinates = cylinderMatrix.MultiplyPoint3x4(vertex.Coordinates);
             }
 
-            foreach (var face in cyllinderMesh.Faces)
+            foreach (var face in cylinderMesh.Faces)
+            {
+                this.Faces.Add(face);
+            }
+        }
+
+        internal void CreateIcosphere(int subdivisions, float sphereSize, Matrix4x4 sphereMatrix)
+        {
+            var icosphereMesh = GenMeshFactory.CreateIcosphere(subdivisions, sphereSize);
+
+            foreach (var vertex in icosphereMesh.Vertices)
+            {
+                vertex.Coordinates = sphereMatrix.MultiplyPoint3x4(vertex.Coordinates);
+            }
+
+            foreach (var face in icosphereMesh.Faces)
             {
                 this.Faces.Add(face);
             }

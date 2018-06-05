@@ -51,7 +51,7 @@ namespace ProceduralSpaceShip
         {
             Random.InitState(this.seed);
 
-            var mesh = GenMesh.CreateCube();
+            var mesh = GenMeshFactory.CreateCube();
 
             Generate(mesh);
 
@@ -272,7 +272,7 @@ namespace ProceduralSpaceShip
                     AddDiscToFace(genmesh, fac);
 
                 foreach (var fac in cylinderFaces)
-                    AddCyllindersToFace(genmesh, fac);
+                    AddCylindersToFace(genmesh, fac);
             }
 
             // Apply horizontal symmetry sometimes
@@ -326,7 +326,7 @@ namespace ProceduralSpaceShip
             return mat;
         }
 
-        private void AddCyllindersToFace(GenMesh genmesh, GenMeshFace fac)
+        private void AddCylindersToFace(GenMesh genmesh, GenMeshFace fac)
         {
             var horizontalStep = Random.Range(1, 3);
             var verticalStep = Random.Range(1, 3);
@@ -346,7 +346,7 @@ namespace ProceduralSpaceShip
                     var pos = Vector3.Lerp(top, bottom, ((float)v + 1) / (verticalStep + 1));
                     var cylinderMatrix = GetFaceMatrix(fac, pos) * Matrix4x4.Rotate(Quaternion.AngleAxis(90, new Vector3(0, 1, 0)));
 
-                    genmesh.CreateCyllinder(numberOfSegments, cylinderSize, cylinderSize, cylinderDepth, cylinderMatrix);
+                    genmesh.CreateCylinder(numberOfSegments, cylinderSize, cylinderSize, cylinderDepth, cylinderMatrix);
                 }
             }
 
@@ -358,14 +358,14 @@ namespace ProceduralSpaceShip
             var faceHeight = fac.Height;
             var depth = 0.125f * Mathf.Min(faceWidth, faceHeight);
 
-            genmesh.CreateCyllinder(
+            genmesh.CreateCylinder(
                 32,
                 depth * 3,
                 depth * 4,
                 depth,
                 GetFaceMatrix(fac, fac.CalculateCenterBounds() + fac.Normal * depth * 0.5f));
 
-            genmesh.CreateCyllinder(
+            genmesh.CreateCylinder(
                 32,
                 depth * 1.25f,
                 depth * 2.25f,
@@ -382,12 +382,67 @@ namespace ProceduralSpaceShip
 
         private void AddSphereToFace(GenMesh genmesh, GenMeshFace fac)
         {
-            
+            var sphereSize = Random.Range(0.4f, 1f) * Mathf.Min(fac.Width, fac.Height);
+            var sphereMatrix = GetFaceMatrix(fac, fac.CalculateCenterBounds() - fac.Normal * Random.Range(0f, sphereSize * 0.5f));
+            genmesh.CreateIcosphere(3, sphereSize, sphereMatrix);
+
+            /*
+    for vert in result['verts']:
+        for face in vert.link_faces:
+            face.material_index = Material.hull
+             */
         }
 
         private void AddWeaponsToFace(GenMesh genmesh, GenMeshFace fac)
         {
-            
+            var horizontalStep = Random.Range(1, 3);
+            var verticalStep = Random.Range(1, 3);
+            var numSegments = 16;
+
+            var weaponSize = 0.5f * Mathf.Min(fac.Width / (horizontalStep + 2), fac.Height / (verticalStep + 2));
+            var weaponDepth = weaponSize * 0.2f;
+
+            for (var h = 0; h < horizontalStep; h++)
+            {
+                var top = Vector3.Lerp(fac.LeftTop.Coordinates, fac.RightTop.Coordinates, (float)(h + 1) / (horizontalStep + 1));
+                var bottom = Vector3.Lerp(fac.LeftBottom.Coordinates, fac.RightBottom.Coordinates, (float)(h + 1) / (horizontalStep + 1));
+
+                for (var v = 0; v < verticalStep; v++)
+                {
+                    var pos = Vector3.Lerp(top, bottom, (float)(v + 1) / (verticalStep + 1));
+                    var faceMatrix = GetFaceMatrix(fac, pos + fac.Normal * weaponDepth * 0.5f) *
+                        Matrix4x4.Rotate(Quaternion.AngleAxis(Random.Range(0, 90), new Vector3(0, 0, 1)));
+
+
+                    // Turret foundation
+                    genmesh.CreateCylinder(numSegments, weaponSize * 0.9f, weaponSize, weaponDepth, faceMatrix);
+
+                    // Turret left guard
+                    var leftGuardMat = faceMatrix *
+                        Matrix4x4.Rotate(Quaternion.AngleAxis(90, new Vector3(0, 1, 0))) *
+                        Matrix4x4.Translate(new Vector3(0, 0, weaponSize * 0.6f));
+                    genmesh.CreateCylinder(numSegments, weaponSize * 0.6f, weaponSize * 0.5f, weaponDepth * 2, leftGuardMat);
+
+                    // Turret right guard
+                    var rightGuardMat = faceMatrix *
+                        Matrix4x4.Rotate(Quaternion.AngleAxis(90, new Vector3(0, 1, 0))) *
+                        Matrix4x4.Translate(new Vector3(0, 0, weaponSize * -0.6f));
+                    genmesh.CreateCylinder(numSegments, weaponSize * 0.5f, weaponSize * 0.6f, weaponDepth * 2, rightGuardMat);
+
+                    // Turret housing
+                    var upwardAngle = Random.Range(0, 45);
+                    var turretHouseMat = faceMatrix *
+                        Matrix4x4.Rotate(Quaternion.AngleAxis(upwardAngle, new Vector3(1, 0, 0))) *
+                        Matrix4x4.Translate(new Vector3(0, weaponSize * -0.4f, 0));
+                    genmesh.CreateCylinder(8, weaponSize * 0.4f, weaponSize * 0.4f, weaponDepth * 5, turretHouseMat);
+
+                    // Turret barrels L + R
+                    genmesh.CreateCylinder(8, weaponSize * 0.1f, weaponSize * 0.1f, weaponDepth * 6, turretHouseMat *
+                        Matrix4x4.Translate(new Vector3(weaponSize * 0.2f, 0, -weaponSize)));
+                    genmesh.CreateCylinder(8, weaponSize * 0.1f, weaponSize * 0.1f, weaponDepth * 6, turretHouseMat *
+                        Matrix4x4.Translate(new Vector3(weaponSize * -0.2f, 0, -weaponSize)));
+                }
+            }
         }
 
         private void AddSurfaceAntennaToFace(GenMesh genmesh, GenMeshFace fac)
@@ -413,7 +468,7 @@ namespace ProceduralSpaceShip
 
                         // Spire
                         var numSegments = Random.Range(3, 6);
-                        genmesh.CreateCyllinder(numSegments, 0, baseDiameter, depth, GetFaceMatrix(fac, pos + fac.Normal * depth * 0.5f));
+                        genmesh.CreateCylinder(numSegments, 0, baseDiameter, depth, GetFaceMatrix(fac, pos + fac.Normal * depth * 0.5f));
 
                         //for vert in result['verts']:
                         //    for vert_face in vert.link_faces:
@@ -421,7 +476,7 @@ namespace ProceduralSpaceShip
                         //    }
 
                         // Base
-                        genmesh.CreateCyllinder(
+                        genmesh.CreateCylinder(
                             numSegments,
                             baseDiameter * Random.Range(1f, 1.5f),
                             baseDiameter * Random.Range(1.5f, 2f),

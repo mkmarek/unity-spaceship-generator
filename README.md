@@ -8,12 +8,12 @@ This is a port of a spaceship generator originally written as a blender plugin a
 
 - [x] Main spaceship segments extrusion
 - [x] Asymmetry segments
-- [ ] Face details
+- [x] Face details
     - [x] exhaust
     - [x] grid
     - [x] surface antenna
-    - [ ] weapons
-    - [ ] sphere to face
+    - [x] weapons
+    - [x] sphere to face
     - [x] disc to face
     - [x] cylinders to face
 - [ ] horizontal symmetry
